@@ -1,0 +1,9 @@
+{
+    "build": {
+      "builder": "GO"
+    },
+    "deploy": {
+      "startCommand": "go run main.go"
+    }
+  }
+  
