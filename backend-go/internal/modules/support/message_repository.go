@@ -4,72 +4,100 @@ import (
 	"context"
 	"fmt"
 
-	"cloud.google.com/go/firestore"
 	"mypremier-backend/internal/config"
 )
 
-type MessageRepository struct {
-	client     *firestore.Client
-	collection string
-}
+// MessageRepository provides data access for support messages using PostgreSQL.
+type MessageRepository struct{}
 
+// NewMessageRepository creates a new MessageRepository using the global PostgreSQL pool.
 func NewMessageRepository() (*MessageRepository, error) {
-	client, err := config.FirebaseApp.Firestore(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get firestore client: %w", err)
+	if config.DB == nil {
+		return nil, fmt.Errorf("database not initialized")
 	}
 
-	return &MessageRepository{
-		client:     client,
-		collection: "support_messages",
-	}, nil
+	return &MessageRepository{}, nil
 }
 
+// GetBySupportID retrieves all messages for a specific support request ordered by created_at ascending.
 func (r *MessageRepository) GetBySupportID(ctx context.Context, supportID string) ([]SupportMessage, error) {
-	iter := r.client.Collection(r.collection).
-		Where("support_id", "==", supportID).
-		OrderBy("created_at", firestore.Asc).
-		Documents(ctx)
-	defer iter.Stop()
+	rows, err := config.DB.Query(ctx, `
+		SELECT 
+			id::text,
+			support_id::text,
+			sender,
+			message,
+			created_at
+		FROM support_messages
+		WHERE support_id = $1::uuid
+		ORDER BY created_at ASC
+	`, supportID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch support messages: %w", err)
+	}
+	defer rows.Close()
 
 	var messages []SupportMessage
-	for {
-		doc, err := iter.Next()
-		if err != nil {
-			break
+
+	for rows.Next() {
+		var msg SupportMessage
+
+		if err := rows.Scan(&msg.ID, &msg.SupportID, &msg.SenderType, &msg.Message, &msg.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan support message: %w", err)
 		}
 
-		var message SupportMessage
-		if err := doc.DataTo(&message); err != nil {
-			continue
-		}
+		messages = append(messages, msg)
+	}
 
-		// Set ID from document ID if not present in data
-		if message.ID == "" {
-			message.ID = doc.Ref.ID
-		}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating support messages: %w", err)
+	}
 
-		messages = append(messages, message)
+	// Ensure we always return an array, never nil
+	if messages == nil {
+		messages = []SupportMessage{}
 	}
 
 	return messages, nil
 }
 
+// Create inserts a new support message and returns its generated ID.
 func (r *MessageRepository) Create(ctx context.Context, supportID string, senderType string, message string) (string, error) {
-	docRef := r.client.Collection(r.collection).NewDoc()
-
-	messageData := map[string]interface{}{
-		"support_id":  supportID,
-		"sender_type": senderType,
-		"message":     message,
-		"created_at":  firestore.ServerTimestamp,
-	}
-
-	_, err := docRef.Set(ctx, messageData)
+	var id string
+	err := config.DB.QueryRow(ctx, `
+		INSERT INTO support_messages (support_id, sender, message)
+		VALUES ($1::uuid, $2, $3)
+		RETURNING id::text
+	`, supportID, senderType, message).Scan(&id)
 	if err != nil {
-		return "", fmt.Errorf("failed to create support message: %w", err)
+		return "", fmt.Errorf("failed to create support message (SQL error): %w", err)
 	}
 
-	return docRef.ID, nil
+	return id, nil
 }
 
+// CreateAndReturn inserts a new support message and returns the full message.
+func (r *MessageRepository) CreateAndReturn(ctx context.Context, supportID string, senderType string, message string) (*SupportMessage, error) {
+	var msg SupportMessage
+	err := config.DB.QueryRow(ctx, `
+		INSERT INTO support_messages (support_id, sender, message)
+		VALUES ($1::uuid, $2, $3)
+		RETURNING 
+			id::text,
+			support_id::text,
+			sender,
+			message,
+			created_at
+	`, supportID, senderType, message).Scan(
+		&msg.ID,
+		&msg.SupportID,
+		&msg.SenderType,
+		&msg.Message,
+		&msg.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create support message (SQL error): %w", err)
+	}
+
+	return &msg, nil
+}

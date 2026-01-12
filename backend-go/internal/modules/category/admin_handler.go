@@ -59,8 +59,7 @@ func (h *AdminHandler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input struct {
-		Name     string `json:"name"`
-		ParentID string `json:"parent_id"`
+		Name string `json:"name"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -75,8 +74,7 @@ func (h *AdminHandler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	category := Category{
-		Name:     input.Name,
-		ParentID: input.ParentID,
+		Name: input.Name,
 	}
 
 	id, err := h.repo.Create(r.Context(), category)
@@ -92,9 +90,8 @@ func (h *AdminHandler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	response := map[string]interface{}{
-		"id":        id,
-		"name":      category.Name,
-		"parent_id": category.ParentID,
+		"id":   id,
+		"name": category.Name,
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("Error encoding response: %v", err)
@@ -117,8 +114,7 @@ func (h *AdminHandler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input struct {
-		Name     string `json:"name"`
-		ParentID string `json:"parent_id"`
+		Name string `json:"name"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -133,8 +129,7 @@ func (h *AdminHandler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	category := Category{
-		Name:     input.Name,
-		ParentID: input.ParentID,
+		Name: input.Name,
 	}
 
 	err := h.repo.Update(r.Context(), path, category)
@@ -153,9 +148,8 @@ func (h *AdminHandler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	response := map[string]interface{}{
-		"id":        path,
-		"name":      category.Name,
-		"parent_id": category.ParentID,
+		"id":   path,
+		"name": category.Name,
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("Error encoding response: %v", err)

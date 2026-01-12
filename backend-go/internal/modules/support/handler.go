@@ -34,12 +34,17 @@ func (h *Handler) CreateSupport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If data is nil, initialize it as empty map
-	if input.Data == nil {
-		input.Data = make(map[string]interface{})
+	if input.UserEmail == "" {
+		http.Error(w, "user_email is required", http.StatusBadRequest)
+		return
 	}
 
-	id, err := h.repo.Create(r.Context(), input.Data)
+	if input.Subject == "" {
+		http.Error(w, "subject is required", http.StatusBadRequest)
+		return
+	}
+
+	id, err := h.repo.Create(r.Context(), input.UserEmail, input.Subject)
 	if err != nil {
 		log.Printf("Error creating support request: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -47,8 +52,7 @@ func (h *Handler) CreateSupport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := CreateSupportResponse{
-		ID:     id,
-		Status: "open",
+		ID: id,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

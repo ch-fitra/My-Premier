@@ -2,11 +2,10 @@ package category
 
 import "time"
 
-// Category represents a category in Firestore
+// Category represents a category in PostgreSQL
 type Category struct {
-	ID        string    `firestore:"id" json:"id"`
-	Name      string    `firestore:"name" json:"name"`
-	ParentID  string    `firestore:"parent_id" json:"parent_id"`
-	CreatedAt time.Time `firestore:"created_at" json:"created_at"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
 }
 

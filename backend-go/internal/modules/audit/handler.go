@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"mypremier-backend/internal/middleware"
+	"mypremier-backend/internal/common/authcontext"
 )
 
 type Handler struct {
@@ -47,14 +47,14 @@ func (h *Handler) GetAuditLogs(w http.ResponseWriter, r *http.Request) {
 
 // LogAction creates an audit log entry
 func (h *Handler) LogAction(ctx context.Context, action, entity, entityID string) error {
-	actorUID := middleware.GetUserUID(ctx)
-	if actorUID == "" {
-		// If no UID in context, skip logging (for non-authenticated operations)
+	actorID := authcontext.GetUserID(ctx)
+	if actorID == "" {
+		// If no ID in context, skip logging (for non-authenticated operations)
 		return nil
 	}
 
 	logEntry := AuditLog{
-		ActorUID: actorUID,
+		ActorUID: actorID, // Using user ID for actor_uid column
 		Action:   action,
 		Entity:   entity,
 		EntityID: entityID,

@@ -1,54 +1,52 @@
 package middleware
 
 import (
-	"context"
+	"log"
 	"net/http"
 	"strings"
 
-	"mypremier-backend/internal/config"
+	"mypremier-backend/internal/common/authcontext"
+	"mypremier-backend/internal/common/jwt"
 )
 
-type contextKey string
-
-const userUIDKey contextKey = "userUID"
-
+// AuthRequired validates JWT tokens and injects user info into context
 func AuthRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
+		// Extract token from Authorization header
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			http.Error(w, "Authorization header required", http.StatusUnauthorized)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
+		// Check Bearer token format
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
 		tokenString := parts[1]
 
-		authClient, err := config.FirebaseApp.Auth(r.Context())
+		// Validate token
+		claims, err := jwt.ValidateToken(tokenString)
 		if err != nil {
-			http.Error(w, "Firebase auth init failed", http.StatusInternalServerError)
+			log.Printf("Token validation error: %v", err)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		token, err := authClient.VerifyIDToken(context.Background(), tokenString)
-		if err != nil {
-			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
-			return
-		}
+		// Log token claims (for debugging)
+		log.Printf("Token validated - UserID: %s, Email: %s, Role: %s", claims.UserID, claims.Email, claims.Role)
 
-		// simpan UID ke context
-		ctx := context.WithValue(r.Context(), userUIDKey, token.UID)
+		// Inject user info into context
+		ctx := r.Context()
+		ctx = authcontext.WithUserID(ctx, claims.UserID)
+		ctx = authcontext.WithUserEmail(ctx, claims.Email)
+		ctx = authcontext.WithUserRole(ctx, claims.Role)
+
+		// Pass request with updated context
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// helper ambil uid di handler
-func GetUserUID(ctx context.Context) string {
-	uid, _ := ctx.Value(userUIDKey).(string)
-	return uid
-}

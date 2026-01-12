@@ -22,11 +22,17 @@ func NewHandler() (*Handler, error) {
 }
 
 type SummaryResponse struct {
-	TotalProducts  int `json:"total_products"`
+	TotalProducts   int `json:"total_products"`
 	TotalCategories int `json:"total_categories"`
 	TotalRequests   int `json:"total_requests"`
-	SupportOpen     int `json:"support_open"`
-	SupportClosed   int `json:"support_closed"`
+	TotalSupports   int `json:"total_supports"`
+}
+
+type ClientSummaryResponse struct {
+	TotalRequests int `json:"total_requests"`
+	OpenRequests  int `json:"open_requests"`
+	TotalSupports int `json:"total_supports"`
+	OpenSupports  int `json:"open_supports"`
 }
 
 func (h *Handler) GetSummary(w http.ResponseWriter, r *http.Request) {
@@ -58,31 +64,50 @@ func (h *Handler) GetSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	supportOpen, err := h.repo.CountSupportsByStatus(ctx, "open")
+	totalSupports, err := h.repo.CountSupports(ctx)
 	if err != nil {
-		log.Printf("Error counting open supports: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	supportClosed, err := h.repo.CountSupportsByStatus(ctx, "closed")
-	if err != nil {
-		log.Printf("Error counting closed supports: %v", err)
+		log.Printf("Error counting supports: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	response := SummaryResponse{
-		TotalProducts:  totalProducts,
+		TotalProducts:   totalProducts,
 		TotalCategories: totalCategories,
 		TotalRequests:   totalRequests,
-		SupportOpen:     supportOpen,
-		SupportClosed:   supportClosed,
+		TotalSupports:    totalSupports,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("Error encoding response: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// GetClientSummary handles GET /client/dashboard/summary
+// It uses the authenticated client's email for scoping.
+func (h *Handler) GetClientSummary(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx := r.Context()
+
+	summary, err := h.repo.GetClientSummary(ctx)
+	if err != nil {
+		log.Printf("Error fetching client dashboard summary: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	resp := ClientSummaryResponse(summary)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("Error encoding client summary response: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

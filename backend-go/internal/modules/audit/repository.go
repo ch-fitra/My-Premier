@@ -4,39 +4,33 @@ import (
 	"context"
 	"fmt"
 
-	"cloud.google.com/go/firestore"
 	"mypremier-backend/internal/config"
 )
 
-type Repository struct {
-	client     *firestore.Client
-	collection string
-}
+// Repository provides data access for audit logs using PostgreSQL.
+type Repository struct{}
 
+// NewRepository creates a new Repository using the global PostgreSQL pool.
 func NewRepository() (*Repository, error) {
-	client, err := config.FirebaseApp.Firestore(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get firestore client: %w", err)
+	if config.DB == nil {
+		return nil, fmt.Errorf("database not initialized")
 	}
 
-	return &Repository{
-		client:     client,
-		collection: "audit_logs",
-	}, nil
+	return &Repository{}, nil
 }
 
+// Create inserts a new audit log entry.
 func (r *Repository) Create(ctx context.Context, log AuditLog) error {
-	docRef := r.client.Collection(r.collection).NewDoc()
-
-	logData := map[string]interface{}{
-		"actor_uid": log.ActorUID,
-		"action":    log.Action,
-		"entity":    log.Entity,
-		"entity_id": log.EntityID,
-		"created_at": firestore.ServerTimestamp,
-	}
-
-	_, err := docRef.Set(ctx, logData)
+	err := config.DB.QueryRow(ctx, `
+		INSERT INTO audit_logs (actor_uid, action, entity, entity_id)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id::text, created_at
+	`,
+		log.ActorUID,
+		log.Action,
+		log.Entity,
+		log.EntityID,
+	).Scan(&log.ID, &log.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to create audit log: %w", err)
 	}
@@ -44,30 +38,44 @@ func (r *Repository) Create(ctx context.Context, log AuditLog) error {
 	return nil
 }
 
+// GetAll retrieves all audit logs ordered by creation time descending.
 func (r *Repository) GetAll(ctx context.Context) ([]AuditLog, error) {
-	iter := r.client.Collection(r.collection).
-		OrderBy("created_at", firestore.Desc).
-		Documents(ctx)
-	defer iter.Stop()
+	rows, err := config.DB.Query(ctx, `
+		SELECT 
+			id::text,
+			actor_uid,
+			action,
+			entity,
+			entity_id,
+			created_at
+		FROM audit_logs
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch audit logs: %w", err)
+	}
+	defer rows.Close()
 
 	var logs []AuditLog
-	for {
-		doc, err := iter.Next()
-		if err != nil {
-			break
-		}
 
+	for rows.Next() {
 		var log AuditLog
-		if err := doc.DataTo(&log); err != nil {
-			continue
-		}
-
-		// Set ID from document ID if not present in data
-		if log.ID == "" {
-			log.ID = doc.Ref.ID
+		if err := rows.Scan(
+			&log.ID,
+			&log.ActorUID,
+			&log.Action,
+			&log.Entity,
+			&log.EntityID,
+			&log.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan audit log: %w", err)
 		}
 
 		logs = append(logs, log)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating audit logs: %w", err)
 	}
 
 	return logs, nil

@@ -2,13 +2,13 @@ package audit
 
 import "time"
 
-// AuditLog represents an audit log entry in Firestore
+// AuditLog represents an audit log entry stored in PostgreSQL.
 type AuditLog struct {
-	ID        string    `firestore:"id" json:"id"`
-	ActorUID  string    `firestore:"actor_uid" json:"actor_uid"`
-	Action    string    `firestore:"action" json:"action"`
-	Entity    string    `firestore:"entity" json:"entity"`
-	EntityID  string    `firestore:"entity_id" json:"entity_id"`
-	CreatedAt time.Time `firestore:"created_at" json:"created_at"`
+	ID        string    `json:"id"`
+	ActorUID  string    `json:"actor_uid"`
+	Action    string    `json:"action"`
+	Entity    string    `json:"entity"`
+	EntityID  string    `json:"entity_id"`
+	CreatedAt time.Time `json:"created_at"`
 }
 

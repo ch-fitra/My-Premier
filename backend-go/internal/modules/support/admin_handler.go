@@ -53,14 +53,15 @@ func (h *AdminHandler) GetSupports(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AdminHandler) UpdateSupportStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPatch {
+	if r.Method != http.MethodPatch && r.Method != http.MethodPut {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	// Extract support ID from path /admin/support/{id}
-	path := strings.TrimPrefix(r.URL.Path, "/admin/support/")
-	if path == "" || path == r.URL.Path {
+	path := r.URL.Path
+	supportID := strings.TrimPrefix(path, "/admin/support/")
+	if supportID == "" || supportID == path {
 		http.Error(w, "Support ID is required", http.StatusBadRequest)
 		return
 	}
@@ -68,7 +69,6 @@ func (h *AdminHandler) UpdateSupportStatus(w http.ResponseWriter, r *http.Reques
 	var input struct {
 		Status string `json:"status"`
 	}
-
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		log.Printf("Error decoding request body: %v", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -76,34 +76,19 @@ func (h *AdminHandler) UpdateSupportStatus(w http.ResponseWriter, r *http.Reques
 	}
 
 	if input.Status == "" {
-		http.Error(w, "Status is required", http.StatusBadRequest)
+		http.Error(w, "status is required", http.StatusBadRequest)
 		return
 	}
 
-	err := h.repo.UpdateStatus(r.Context(), path, input.Status)
+	err := h.repo.UpdateStatus(r.Context(), supportID, input.Status)
 	if err != nil {
 		log.Printf("Error updating support status: %v", err)
-		if strings.Contains(err.Error(), "invalid status") {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-
-	// Log audit action
-	_ = h.auditHandler.LogAction(r.Context(), "status_updated", "support", path)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	response := map[string]interface{}{
-		"id":     path,
-		"status": input.Status,
-	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("Error encoding response: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
+	json.NewEncoder(w).Encode(map[string]string{"message": "Support status updated successfully"})
 }
 

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"mypremier-backend/internal/middleware"
+	"mypremier-backend/internal/common/authcontext"
 )
 
 type MessageHandler struct {
@@ -51,6 +51,11 @@ func (h *MessageHandler) GetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ensure we always return an array, never null
+	if messages == nil {
+		messages = []SupportMessage{}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(messages); err != nil {
 		log.Printf("Error encoding response: %v", err)
@@ -91,8 +96,8 @@ func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify user is authenticated (UID is already validated by AuthRequired middleware)
-	_ = middleware.GetUserUID(r.Context())
+	// Verify user is authenticated (ID is already validated by AuthRequired middleware)
+	_ = authcontext.GetUserID(r.Context())
 
 	// Validate and set sender type
 	// Default to "client" if not provided
@@ -101,9 +106,9 @@ func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 		senderType = "client"
 	}
 
-	// Validate sender type
-	if senderType != "client" && senderType != "admin" {
-		http.Error(w, "Invalid sender_type. Must be 'client' or 'admin'", http.StatusBadRequest)
+	// Validate sender type - allowed values: "client", "sales", "admin"
+	if senderType != "client" && senderType != "sales" && senderType != "admin" {
+		http.Error(w, "Invalid sender_type. Must be 'client', 'sales', or 'admin'", http.StatusBadRequest)
 		return
 	}
 
